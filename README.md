@@ -1,1 +1,1 @@
-# Stock-Prediction-App
+# Stock-Dashboard-App
