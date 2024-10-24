@@ -1,7 +1,6 @@
 # pip install streamlit fbprophet yfinance plotly
 import streamlit as st
 from datetime import date
-
 import yfinance as yf
 from prophet import Prophet
 from prophet.plot import plot_plotly
@@ -47,13 +46,13 @@ def plot_raw_data():
 
 plot_raw_data()
 
-
 # Predict forecast with Prophet.
 df_train = data[['Date', 'Close']]
 df_train = df_train.rename(columns={"Date": "ds", "Close": "y"})
 
 m = Prophet()
 m.fit(df_train)
+
 future = m.make_future_dataframe(periods=period)
 forecast = m.predict(future)
 
