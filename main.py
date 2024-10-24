@@ -1,5 +1,4 @@
 import streamlit as st
-import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import yfinance as yf
@@ -7,20 +6,24 @@ from datetime import datetime, timedelta
 import pytz
 import ta
 
-# Fetch stock data based on the ticker, period, and interval
+# Función para obtener datos de acciones
 
 
 def fetch_stock_data(ticker, period, interval):
-    end_date = datetime.now()
-    if period == 'lwk':
-        start_date = end_date - timedelta(days=7)
-        data = yf.download(ticker, start=start_date,
-                           end=end_date, interval=interval)
-    else:
-        data = yf.download(ticker, period=period, interval=interval)
-    return data
+    try:
+        end_date = datetime.now()
+        if period == 'lwk':
+            start_date = end_date - timedelta(days=7)
+            data = yf.download(ticker, start=start_date,
+                               end=end_date, interval=interval)
+        else:
+            data = yf.download(ticker, period=period, interval=interval)
+        return data
+    except Exception as e:
+        st.error(f"Error fetching data for {ticker}: {e}")
+        return pd.DataFrame()  # Retorna un DataFrame vacío en caso de error
 
-# Process data to ensure it is timezone-aware and has the correct format
+# Procesar datos para asegurar que tenga la zona horaria correcta
 
 
 def process_data(data):
@@ -30,7 +33,7 @@ def process_data(data):
     data.reset_index(inplace=True)
     return data
 
-# Calculate basic metrics from the stock data
+# Calcular métricas básicas de los datos de acciones
 
 
 def calculate_metrics(data):
@@ -43,20 +46,21 @@ def calculate_metrics(data):
     volume = data['Volume'].sum()
     return last_close, change, pct_change, high, low, volume
 
-# Add simple moving average (SMA) and exponential moving average (EMA) indicators
+# Añadir indicadores técnicos como SMA y EMA
 
 
 def add_technical_indicators(data):
-    data['SMA_20'] = ta.trend.sma_indicator(data['Close'], window=20)
-    data['EMA_20'] = ta.trend.ema_indicator(data['Close'], window=20)
+    if len(data) >= 20:  # Asegúrate de tener suficientes datos
+        data['SMA_20'] = ta.trend.sma_indicator(data['Close'], window=20)
+        data['EMA_20'] = ta.trend.ema_indicator(data['Close'], window=20)
     return data
 
 
-# Set up Streamlit page layout
+# Configuración de la página de Streamlit
 st.set_page_config(layout="wide")
 st.title("Real Time Stock Dashboard")
 
-# Sidebar for user input parameters
+# Sidebar para parámetros de entrada
 st.sidebar.header('Chart Parameters')
 ticker = st.sidebar.text_input('Ticker', "ADBE")
 time_period = st.sidebar.selectbox(
@@ -64,7 +68,7 @@ time_period = st.sidebar.selectbox(
 chart_type = st.sidebar.selectbox('Chart Type', ['Candlestick', 'Line'])
 indicators = st.sidebar.multiselect('Indicators', ['SMA 20', 'EMA 20'])
 
-# Mapping of time periods to data intervals
+# Mapeo de períodos de tiempo a intervalos de datos
 interval_mapping = {
     '1d': '1m',
     '1wk': '30m',
@@ -73,7 +77,7 @@ interval_mapping = {
     'max': '1wk'
 }
 
-# Update the dashboard based on user input
+# Actualizar el dashboard basado en la entrada del usuario
 if st.sidebar.button('Update'):
     data = fetch_stock_data(ticker, time_period, interval_mapping[time_period])
     if data.empty:
@@ -85,7 +89,7 @@ if st.sidebar.button('Update'):
         last_close, change, pct_change, high, low, volume = calculate_metrics(
             data)
 
-        # Display main metrics
+        # Mostrar métricas principales
         st.metric(label=f"{ticker} Last Price", value=f"{last_close:.2f} USD",
                   delta=f"{change:.2f} ({pct_change:.2f}%)")
 
@@ -94,7 +98,7 @@ if st.sidebar.button('Update'):
         col2.metric("Low", f"{low:.2f} USD")
         col3.metric("Volume", f"{volume:,}")
 
-        # Plot the stock price chart
+        # Gráfico del precio de las acciones
         fig = go.Figure()
         if chart_type == 'Candlestick':
             fig.add_trace(go.Candlestick(x=data['Datetime'],
@@ -106,31 +110,31 @@ if st.sidebar.button('Update'):
             fig.add_trace(go.Scatter(
                 x=data['Datetime'], y=data['Close'], mode='lines', name='Line'))
 
-        # Add selected technical indicators to the chart
+        # Añadir indicadores técnicos seleccionados al gráfico
         for indicator in indicators:
             if indicator == 'SMA 20':
                 fig.add_trace(go.Scatter(
-                    x=data['Datetime'], y=data['SMA_20'], name='SMA 20'))
+                    x=data['Datetime'], y=data['SMA_20'], name='SMA 20', line=dict(color='blue')))
             elif indicator == 'EMA 20':
                 fig.add_trace(go.Scatter(
-                    x=data['Datetime'], y=data['EMA_20'], name='EMA 20'))
+                    x=data['Datetime'], y=data['EMA_20'], name='EMA 20', line=dict(color='orange')))
 
-        # Format graph
+        # Formato del gráfico
         fig.update_layout(title=f'{ticker} {time_period.upper()}, Chart',
                           xaxis_title='Time',
                           yaxis_title='Price (USD)',
                           height=600)
         st.plotly_chart(fig, use_container_width=True)
 
-        # Display historical data and technical indicators
+        # Mostrar datos históricos y indicadores técnicos
         st.subheader('Historical Data')
-        st.subheader(
+        st.dataframe(
             data[['Datetime', 'Open', 'High', 'Low', 'Close', 'Volume']])
 
         st.subheader('Technical Indicators')
-        st.subheader(data[['Datetime', 'SMA_20', 'EMA_20']])
+        st.dataframe(data[['Datetime', 'SMA_20', 'EMA_20']])
 
-# Sidebar section for real-time stock prices of selected symbols
+# Sidebar para precios de acciones en tiempo real de símbolos seleccionados
 st.sidebar.header('Real-Time Stock Prices')
 stock_symbols = ['AAPL', 'GOOGL', 'AMZN', 'MSFT']
 for symbol in stock_symbols:
@@ -140,9 +144,9 @@ for symbol in stock_symbols:
         last_price = real_time_data['Close'].iloc[-1]
         change = last_price - real_time_data['Open'].iloc[0]
         pct_change = (change / real_time_data['Open'].iloc[0]) * 100
-        st.sidebar.metric(f"{symbol}", f"{last_price.iloc[-1]:.2f} USD",
-                          f"{change.iloc[-1]:.2f} ({pct_change.iloc[-1]:.2f}%)")
+        st.sidebar.metric(f"{symbol}", f"{last_price:.2f} USD",
+                          f"{change:.2f} ({pct_change:.2f}%)")
 
-# Sidebar information section
+# Sección de información en la barra lateral
 st.sidebar.header('Information')
 st.sidebar.info('This is a financial dashboard built using Python and Streamlit. It provides real-time stock prices and historical data for selected symbols. The dashboard also includes technical indicators such as Simple Moving Average (SMA) and Exponential Moving Average (EMA).')
